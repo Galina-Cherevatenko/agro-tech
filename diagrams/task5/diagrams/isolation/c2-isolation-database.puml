@@ -1,0 +1,28 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C2 - Мультитенантность: База на тенанта (Database per Tenant)
+
+Container_Boundary(tenant_db_isolation, "Изоляция на уровне БД") {
+    
+    Container(api_gateway, "API Gateway", "Kong", "Определяет tenant")
+    
+    Container(db_proxy, "DB Proxy", "PgBouncer / Odyssey", "Прокси к БД тенанта")
+    
+    Container_Boundary(db_cluster, "Database Cluster", "Citus / CockroachDB") {
+        ContainerDb(db1, "DB Tenant 1", "PostgreSQL", "tenant1_db")
+        ContainerDb(db2, "DB Tenant 2", "PostgreSQL", "tenant2_db")
+        ContainerDb(dbN, "DB Tenant N", "PostgreSQL", "tenantN_db")
+    }
+}
+
+Rel(api_gateway, db_proxy, "tenant header", "gRPC")
+Rel(db_proxy, db_cluster, "маршрутизация", "SQL")
+
+note bottom of db_cluster
+    Каждый тенант — отдельная БД
+    Полная изоляция данных
+    Бекап на тенанта
+end note
+
+@enduml

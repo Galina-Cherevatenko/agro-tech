@@ -1,0 +1,86 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C3 - Компонентная диаграмма Центральных сервисов (Основное решение)
+
+' ===== API GATEWAY =====
+Boundary(gateway, "API Gateway (Kong)") {
+    Component(auth_plugin, "Auth Plugin", "Lua", "JWT-валидация")
+    Component(rl_plugin, "Rate Limiter", "Lua + Redis", "Ограничение запросов")
+    Component(log_plugin, "Log Plugin", "Lua", "Логирование")
+    Component(router, "Router", "Nginx", "Маршрутизация")
+}
+
+' ===== AUTH SERVICE =====
+Boundary(auth, "Auth Service (Keycloak)") {
+    Component(ldap, "LDAP Connector", "Java", "Интеграция с AD")
+    Component(oauth, "OAuth2 Provider", "Java", "Выдача токенов")
+    Component(role_manager, "Role Manager", "Java", "Роли: operator, vet, admin")
+}
+
+' ===== DEVICE MANAGER =====
+Boundary(device, "Device Manager (Kotlin+Spring)") {
+    Component(registry, "Device Registry", "JPA", "Реестр камер, кормушек, датчиков")
+    Component(config, "Config Service", "Spring Cloud", "Конфигурации устройств")
+    Component(firmware, "Firmware Manager", "Kotlin", "Обновления прошивок и моделей")
+    Component(tenant, "Tenant Manager", "Spring Security", "Изоляция ферм")
+}
+
+' ===== ALERT ENGINE =====
+Boundary(alert, "Alert Engine (Go+Temporal)") {
+    Component(rule_processor, "Rule Processor", "Temporal", "Обработка правил")
+    Component(escalation, "Escalation Service", "Go", "Эскалация 15→30→60 мин")
+    Component(deduplicator, "Deduplicator", "Go+Redis", "Дедупликация")
+    Component(aggregator, "Event Aggregator", "Go", "Агрегация событий за интервал")
+}
+
+' ===== INVENTORY SERVICE =====
+Boundary(inventory, "Inventory Service (Kotlin)") {
+    Component(stock, "Stock Manager", "Spring Boot", "Остатки кормов по фермам")
+    Component(forecast, "Forecast Engine", "Python+Prophet", "Прогноз расхода")
+    Component(reorder, "Reorder Service", "Kotlin", "Автозаказ при пороге")
+}
+
+' ===== ANALYTICS SERVICE =====
+Boundary(analytics, "Analytics Service (Python+Spark)") {
+    Component(health, "Health Analyzer", "Spark ML", "Оценка состояния животных")
+    Component(trends, "Trend Analyzer", "Spark SQL", "Тренды поведения")
+    Component(reports, "Report Generator", "Pandas", "Отчёты для BI")
+    Component(metrics, "Metric Exporter", "Prometheus", "Метрики для внешних систем")
+}
+
+' ===== NOTIFICATION SERVICE =====
+Boundary(notification, "Notification Service (Go)") {
+    Component(push, "Push Sender", "Go", "FCM/APNS")
+    Component(email, "Email Sender", "Go", "SMTP")
+    Component(sms, "SMS Sender", "Go", "SMS-шлюз")
+    Component(templates, "Template Engine", "Go", "Шаблоны сообщений")
+}
+
+' ===== ХРАНИЛИЩА =====
+Boundary(storage, "Хранилища") {
+    ComponentDb(postgres, "PostgreSQL", "TimescaleDB", "Данные всех ферм")
+    ComponentDb(clickhouse, "ClickHouse", "DWH", "Агрегированная аналитика")
+    ComponentDb(redis, "Redis Cluster", "Redis", "Кэш, сессии, очереди")
+    Component(kafka, "Apache Kafka", "Стриминг", "Шина событий")
+}
+
+' ===== СВЯЗИ МЕЖДУ СЕРВИСАМИ =====
+Rel(device, alert, "События с устройств", "gRPC")
+Rel(alert, notification, "Алерты для отправки", "gRPC")
+Rel(inventory, alert, "Порог запасов", "gRPC")
+Rel(analytics, alert, "Аномалии", "gRPC")
+
+' ===== СВЯЗИ С ХРАНИЛИЩАМИ =====
+Rel(device, postgres, "CRUD", "JDBC")
+Rel(alert, postgres, "CRUD", "PGX")
+Rel(inventory, postgres, "CRUD", "JDBC")
+Rel(analytics, clickhouse, "Запросы", "JDBC")
+
+' ===== СВЯЗИ ЧЕРЕЗ API GATEWAY =====
+Rel(gateway, device, "HTTP", "REST")
+Rel(gateway, alert, "HTTP", "REST")
+Rel(gateway, inventory, "HTTP", "REST")
+Rel(gateway, analytics, "HTTP", "REST")
+
+@enduml

@@ -1,0 +1,66 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Контекстная диаграмма - "АгроТех Х" (MVP свиноводство)
+
+' === Персоны ===
+Person(operator, "Оператор фермы", "Получает алерты, управляет кормушками")
+Person(central_manager, "Центральный оператор", "Мониторит все фермы")
+Person(vet, "Ветеринар", "Анализирует состояние животных")
+Person(system_admin, "Системный администратор", "Управляет инфраструктурой")
+Person(director, "Директор хозяйства", "Просмотр отчётов в BI")
+
+' === Внешние системы (оборудование) ===
+System_Ext(cameras, "IP-камеры", "Hikvision, Dahua, Axis\nRTSP/H.264")
+System_Ext(feeders, "Кормушки/Поилки", "Разные производители\nModbus/OPC-UA")
+System_Ext(water_sensors, "Фильтрация воды", "Датчики pH, мутности")
+
+' === Существующая платформа ===
+System_Boundary(existing, "Существующая платформа 'АгроПром Х'") {
+    Container(kafka, "Apache Kafka", "Шина данных")
+    Container(dwh, "Data Warehouse", "ClickHouse")
+    Container(bi, "BI система", "Power BI")
+    Container(erp, "ERP (1С:Агро)", "Финансы, склад")
+}
+
+' === Новая система (MVP) ===
+System_Boundary(new_mvp, "MVP: Мониторинг свиноводства (НОВОЕ)") {
+    Container(edge_agent, "Edge-агент (на ферме)", "Linux + Docker + GPU", "Видеоаналитика, управление оборудованием, офлайн-режим")
+    Container(central_platform, "Центральная платформа", "K8s + Istio", "Агрегация данных, аналитика, управление")
+    Container(mobile_app, "Мобильное приложение", "React Native", "Для операторов (offline-first)")
+    Container(web_app, "Веб-панель", "React / Grafana", "Мониторинг и отчётность")
+}
+
+' === Связи: Персоны → Системы ===
+Rel(operator, edge_agent, "Просмотр камер, алерты", "LAN")
+Rel(operator, mobile_app, "Push-уведомления", "4G/WiFi")
+Rel(central_manager, web_app, "Мониторинг ферм", "Internet")
+Rel(vet, web_app, "Аналитика по животным", "Internet")
+Rel(system_admin, central_platform, "Управление инфраструктурой", "Internet/VPN")
+Rel(director, bi, "Просмотр отчётов", "Internet")
+
+' === Связи: Оборудование → Edge ===
+Rel(cameras, edge_agent, "RTSP видеопоток", "LAN")
+Rel(feeders, edge_agent, "Телеметрия и команды", "LAN/WiFi")
+Rel(water_sensors, edge_agent, "Показатели качества воды", "LAN")
+
+' === Связи: Офлайн-оповещение ===
+Rel(edge_agent, operator, "Критические алерты без интернета", "LAN / WebSocket")
+
+' === Связи: Интеграция с существующей платформой ===
+Rel(edge_agent, kafka, "Публикует события", "MQTT/Kafka")
+Rel(central_platform, kafka, "Получает/публикует данные", "Kafka")
+Rel(central_platform, dwh, "Запись агрегированных данных", "ETL")
+Rel(central_platform, erp, "Синхронизация запасов корма", "REST API")
+Rel(dwh, bi, "Данные для отчётов", "ODBC")
+
+' === Связи: Синхронизация ===
+Rel(edge_agent, central_platform, "Синхронизация данных (batch 10 мин)", "Internet")
+Rel(mobile_app, central_platform, "Синхронизация при выходе в зону связи", "4G/WiFi")
+
+' === Пояснения ===
+Note right of edge_agent: "НОВЫЙ КОМПОНЕНТ\nАвтономная работа\nДетекция < 5 секунд"
+Note right of kafka: "СУЩЕСТВУЮЩИЙ КОМПОНЕНТ\nНе требует изменений"
+Note bottom of mobile_app: "Работает офлайн\nСинхронизация при восстановлении связи"
+
+@enduml

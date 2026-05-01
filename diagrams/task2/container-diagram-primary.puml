@@ -1,0 +1,121 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Контейнерная диаграмма - Вариант 2 (Микросервисная)
+
+' === Персоны ===
+Person(operator, "Оператор фермы", "Получает алерты, управляет")
+Person(central_manager, "Центральный оператор", "Мониторит фермы")
+Person(vet, "Ветеринар", "Анализирует состояние")
+
+' === Внешние системы ===
+System_Ext(cameras, "IP-камеры", "RTSP/H.264")
+System_Ext(feeders, "Кормушки/Поилки", "Modbus/OPC-UA")
+System_Ext(water_sensors, "Фильтрация воды", "pH, мутность")
+System_Ext(external_analytics, "Внешние BI/ERP", "API")
+
+' === Существующая платформа ===
+System_Boundary(existing, "Существующая платформа 'АгроПром Х'") {
+    Container(kafka, "Apache Kafka", "Шина данных")
+    Container(dwh, "ClickHouse", "Data Warehouse")
+    Container(bi, "Power BI", "Отчёты")
+}
+
+' === НОВЫЕ КОМПОНЕНТЫ ===
+System_Boundary(new_system, "MVP: Мониторинг свиноводства") {
+    
+    ' ===== EDGE-УРОВЕНЬ (ферма) =====
+    Container_Boundary(edge, "Edge-инфраструктура (каждая ферма)") {
+        
+        Container(video_ai, "Video Analyzer", "Python + YOLOv8 + GPU", "Детекция драк, задавливания, подсчёт поголовья")
+        
+        Container(iot_gateway, "IoT Gateway", "Node-RED + Mosquitto", "Сбор телеметрии, управление кормушками/поилками")
+        
+        Container(edge_sync, "Edge Sync Agent", "Go", "Асинхронная синхронизация с центром")
+        
+        ContainerDb(local_cache, "Local Cache", "SQLite / TimescaleDB", "Буферизация до 30 дней")
+        
+        Container(local_api, "Local API", "FastAPI", "Локальный веб-интерфейс")
+    }
+    
+    ' ===== ЦЕНТРАЛЬНЫЕ СЕРВИСЫ =====
+    Container_Boundary(central, "Центральные сервисы") {
+        
+        Container(api_gateway, "API Gateway", "Kong / Nginx + Lua", "Маршрутизация, авторизация, rate limiting")
+        
+        Container(auth, "Auth Service", "Keycloak / OAuth2", "Аутентификация, роли (оператор, ветврач, админ)")
+        
+        Container(device_manager, "Device Manager", "Kotlin + Spring", "Управление устройствами, конфигурации")
+        
+        Container(alert_engine, "Alert Engine", "Go + Temporal", "Глобальные правила оповещений, эскалация")
+        
+        Container(inventory, "Inventory Service", "Kotlin", "Управление запасами кормов, прогнозирование")
+        
+        Container(analytics, "Analytics Service", "Python + Spark", "Аналитика здоровья животных, тренды")
+        
+        Container(notification, "Notification Service", "Go", "Push (FCM/APNS), Email, SMS")
+        
+        ContainerDb(central_db, "Central DB", "PostgreSQL + TimescaleDB", "Данные всех ферм")
+        
+        ContainerDb(cache, "Redis", "Redis Cluster", "Кэш, сессии, очереди")
+    }
+    
+    ' ===== ПРИЛОЖЕНИЯ =====
+    Container(mobile, "Mobile App", "React Native", "Push, просмотр, управление")
+    Container(web, "Web Dashboard", "React + Grafana", "Мониторинг, отчёты")
+}
+
+' ===== СВЯЗИ: ОБОРУДОВАНИЕ → EDGE =====
+Rel(cameras, video_ai, "RTSP видеопоток", "LAN")
+Rel(feeders, iot_gateway, "Команды/телеметрия", "Modbus/OPC-UA/MQTT")
+Rel(water_sensors, iot_gateway, "Показатели", "Modbus/LoRaWAN")
+
+' ===== СВЯЗИ: ВНУТРИ EDGE (офлайн-режим) =====
+Rel(video_ai, iot_gateway, "Команды на кормушки", "MQTT")
+Rel(video_ai, local_cache, "События детекции", "SQL")
+Rel(iot_gateway, local_cache, "Телеметрия", "SQL")
+Rel(video_ai, local_api, "Алерты и статус", "WebSocket")
+Rel(local_api, operator, "Интерфейс оператора", "HTTP/WebSocket")
+
+' ===== СВЯЗИ: EDGE → ЦЕНТР (batch 5-10 минут) =====
+Rel(edge_sync, local_cache, "Читает данные", "SQL")
+Rel(edge_sync, api_gateway, "Синхронизация", "HTTPS/gRPC (batch)")
+Rel(edge_sync, iot_gateway, "Получение команд с центра", "MQTT")
+
+' ===== СВЯЗИ: ВНУТРИ ЦЕНТРА =====
+Rel(api_gateway, auth, "Проверка токенов", "HTTP")
+Rel(api_gateway, device_manager, "Управление устройствами", "gRPC")
+Rel(api_gateway, alert_engine, "Получение алертов", "HTTP")
+Rel(api_gateway, inventory, "Управление запасами", "HTTP")
+Rel(api_gateway, analytics, "Запрос аналитики", "gRPC")
+
+' ===== СВЯЗИ: СЕРВИСЫ МЕЖДУ СОБОЙ =====
+Rel(device_manager, central_db, "Конфигурации", "SQL")
+Rel(alert_engine, central_db, "Правила алертов", "SQL")
+Rel(inventory, central_db, "Запасы кормов", "SQL")
+Rel(analytics, dwh, "Аналитические запросы", "SQL/ODBC")
+Rel(alert_engine, notification, "Отправить уведомление", "gRPC")
+Rel(device_manager, kafka, "События изменений", "Kafka Protocol")
+
+' ===== СВЯЗИ: СУЩЕСТВУЮЩАЯ ПЛАТФОРМА =====
+Rel(kafka, dwh, "Данные в DWH", "Kafka Connect")
+Rel(dwh, bi, "Отчёты", "ODBC")
+
+' ===== СВЯЗИ: КЛИЕНТСКИЕ ПРИЛОЖЕНИЯ =====
+Rel(central_manager, web, "Мониторинг", "HTTPS")
+Rel(vet, web, "Аналитика", "HTTPS")
+Rel(operator, mobile, "Push-уведомления", "4G/WiFi")
+Rel(web, api_gateway, "API запросы", "HTTPS")
+Rel(mobile, api_gateway, "API запросы", "HTTPS")
+Rel(notification, mobile, "Push", "FCM/APNS")
+
+' ===== СВЯЗИ: ВНЕШНИЕ СИСТЕМЫ =====
+Rel(api_gateway, external_analytics, "Метрики", "REST/Prometheus")
+
+' ===== ПОЯСНЕНИЯ =====
+Note right of video_ai: "Ключевой компонент\nРаботает офлайн\nДетекция <5 сек"
+Note right of edge_sync: "Асинхронная синхронизация\nRetry-механизмы\nBatch-отправка"
+Note right of kafka: "Существующий компонент\nНе требует изменений"
+Note bottom of local_cache: "Буферизация на 30 дней\nАвтоочистка"
+
+@enduml

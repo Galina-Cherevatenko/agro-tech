@@ -1,0 +1,62 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C3 - Компонентная диаграмма Edge-агента (Основное решение)
+
+Boundary(edge_agent, "Edge-агент (Linux + Docker + GPU)") {
+    
+    Boundary(video, "Видеоаналитика") {
+        Component(frame_grabber, "Frame Grabber", "OpenCV + Python", "RTSP-клиент, буфер кадров")
+        Component(detector, "Object Detector", "YOLOv8 + CUDA", "Детекция животных в кадре")
+        Component(tracker, "Object Tracker", "DeepSORT", "Трекинг животных, присвоение ID")
+        Component(behavior_analyzer, "Behavior Analyzer", "Python", "Анализ IOU, скорости, поз")
+        Component(alert_generator, "Alert Generator", "Python", "Генерация алертов по правилам")
+        Component(counter, "Head Counter", "Python", "Подсчёт поголовья по зонам")
+    }
+    
+    Boundary(iot, "Управление IoT") {
+        Component(mqtt_broker, "MQTT Broker", "Mosquitto", "Локальная шина данных")
+        Component(modbus_adapter, "Modbus Adapter", "Node-RED", "Адаптер Modbus/RTU, TCP")
+        Component(opcua_adapter, "OPC-UA Adapter", "Node-RED", "Адаптер OPC-UA")
+        Component(device_controller, "Device Controller", "Python", "Логика управления кормушками/поилками")
+    }
+    
+    Boundary(data, "Данные и синхронизация") {
+        Component(event_store, "Event Store", "SQLite / TimescaleDB", "Буфер событий и телеметрии")
+        Component(sync_engine, "Sync Engine", "Go", "Batch-синхронизация с центром (10 мин)")
+        Component(retry_queue, "Retry Queue", "Redis", "Очередь повторных отправок")
+    }
+    
+    Boundary(api, "API и интерфейсы") {
+        Component(local_api, "Local REST API", "FastAPI", "API для локального веб-UI")
+        Component(websocket, "WebSocket Server", "FastAPI", "Real-time алерты оператору")
+        Component(health_check, "Health Check", "Python", "Самодиагностика edge")
+    }
+    
+    Boundary(ml, "ML инфраструктура") {
+        Component(model_repo, "Model Repository", "File System", "Хранилище ONNX-моделей")
+        Component(model_updater, "Model Updater", "Python", "Обновление моделей из центра")
+    }
+}
+
+' === Связи внутри Edge ===
+Rel(frame_grabber, detector, "Кадры", "shared memory")
+Rel(detector, tracker, "Bounding boxes")
+Rel(tracker, behavior_analyzer, "Треки + позиции")
+Rel(behavior_analyzer, alert_generator, "События (драка, задавливание)")
+Rel(alert_generator, event_store, "Сохранение")
+Rel(alert_generator, websocket, "Отправка оператору")
+
+Rel(device_controller, mqtt_broker, "Подписка/публикация", "MQTT")
+Rel(modbus_adapter, mqtt_broker, "")
+Rel(opcua_adapter, mqtt_broker, "")
+Rel(device_controller, event_store, "Сохраняет телеметрию", "SQL")
+
+Rel(sync_engine, event_store, "Читает события")
+Rel(sync_engine, retry_queue, "Ставит в очередь")
+Rel(sync_engine, local_api, "Отправляет на центр", "HTTPS/gRPC")
+
+Rel(local_api, health_check, "Проверка статуса", "HTTP")
+Rel(model_updater, model_repo, "Загружает модели", "S3/HTTP")
+
+@enduml

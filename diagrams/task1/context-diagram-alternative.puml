@@ -1,0 +1,99 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Контекстная диаграмма - "АгроТех Х" (Альтернативное решение: Cloud-Edge Hybrid)
+
+' === Персоны ===
+Person(operator, "Оператор фермы", "Получает алерты, управляет кормушками")
+Person(central_manager, "Центральный оператор", "Мониторит все фермы")
+Person(vet, "Ветеринар", "Анализирует состояние животных")
+Person(system_admin, "Системный администратор", "Управляет инфраструктурой")
+Person(director, "Директор хозяйства", "Просмотр отчётов в BI")
+
+' === Внешние системы (оборудование) ===
+System_Ext(cameras, "IP-камеры", "Hikvision, Dahua, Axis\nRTSP/H.264")
+System_Ext(feeders, "Кормушки/Поилки", "Разные производители\nModbus/OPC-UA")
+System_Ext(water_sensors, "Фильтрация воды", "Датчики pH, мутности")
+
+' === Существующая платформа ===
+System_Boundary(existing, "Существующая платформа 'АгроПром Х'") {
+    Container(kafka, "Apache Kafka", "Шина данных")
+    Container(dwh, "Data Warehouse", "ClickHouse")
+    Container(bi, "BI система", "Power BI")
+    Container(erp, "ERP (1С:Агро)", "Финансы, склад")
+}
+
+' === Новая система (MVP) - Альтернативное решение ===
+System_Boundary(new_mvp_alt, "MVP: Мониторинг свиноводства (Альтернативное решение)") {
+    
+    ' Тонкий edge (только буферизация и базовые правила)
+    Container(thin_edge, "Тонкий Edge-агент", "Linux + Docker (CPU only)", "Буферизация видео, базовая фильтрация, кэширование команд")
+    
+    ' Локальный буфер (офлайн-режим)
+    ContainerDb(local_buffer, "Локальный буфер", "Redis / SQLite", "Очередь событий на синхронизацию (до 30 дней)")
+    
+    ' Локальный нотификатор (базовые алерты без интернета)
+    Container(local_notifier, "Локальный нотификатор", "Python + WebSocket", "Базовые алерты при обрыве связи")
+    
+    ' Облачная видеоаналитика (тяжёлая обработка)
+    Container(cloud_video_ai, "Cloud Video AI", "Serverless GPU (AWS Lambda / Yandex Functions)", "Детекция драк, задавливания, подсчёт поголовья")
+    
+    ' Облачный оркестратор
+    Container(cloud_orchestrator, "Cloud Orchestrator", "K8s + Istio", "Управление правилами, аналитика, прогнозы")
+    
+    ' API Gateway
+    Container(api_gateway, "API Gateway", "Kong / Nginx", "Маршрутизация, авторизация, rate limiting")
+    
+    ' Мобильное приложение
+    Container(mobile_app, "Мобильное приложение", "React Native", "Push-уведомления, просмотр камер")
+    
+    ' Веб-панель
+    Container(web_app, "Веб-панель", "React / Grafana", "Мониторинг и отчётность")
+}
+
+' === Связи: Персоны ===
+Rel(operator, thin_edge, "Просмотр камер (буфер)", "LAN")
+Rel(operator, local_notifier, "Базовые алерты офлайн", "LAN / WebSocket")
+Rel(operator, mobile_app, "Push-уведомления", "4G/WiFi")
+Rel(central_manager, web_app, "Мониторинг ферм", "Internet")
+Rel(vet, web_app, "Аналитика по животным", "Internet")
+Rel(system_admin, cloud_orchestrator, "Управление правилами", "Internet/VPN")
+Rel(director, bi, "Просмотр отчётов", "Internet")
+
+' === Связи: Оборудование → Тонкий Edge ===
+Rel(cameras, thin_edge, "RTSP видеопоток", "LAN")
+Rel(feeders, thin_edge, "Телеметрия и команды", "LAN/WiFi")
+Rel(water_sensors, thin_edge, "Показатели качества воды", "LAN")
+
+' === Связи: Локальная обработка (офлайн) ===
+Rel(thin_edge, local_buffer, "Сохраняет буфер видео", "Локально")
+Rel(local_buffer, local_notifier, "Триггер базовых правил", "Локально")
+Rel(thin_edge, operator, "Прямые команды управления", "LAN")
+
+' === Связи: Синхронизация с облаком (batch) ===
+Rel(thin_edge, api_gateway, "Синхронизация буфера (10 мин)", "Internet (weak WiFi)")
+Rel(local_buffer, api_gateway, "Репликация событий", "Internet (weak WiFi)")
+
+' === Связи: Облачная обработка ===
+Rel(api_gateway, cloud_video_ai, "Видео для аналитики", "gRPC")
+Rel(cloud_video_ai, cloud_orchestrator, "Результаты детекции", "Kafka")
+Rel(cloud_orchestrator, api_gateway, "Статус и алерты", "gRPC")
+
+' === Связи: Интеграция с существующей платформой ===
+Rel(cloud_orchestrator, kafka, "Публикует события", "Kafka Protocol")
+Rel(cloud_orchestrator, dwh, "Запись агрегированных данных", "ETL")
+Rel(cloud_orchestrator, erp, "Синхронизация запасов корма", "REST API")
+Rel(dwh, bi, "Данные для отчётов", "ODBC")
+
+' === Связи: Клиентские приложения ===
+Rel(api_gateway, web_app, "Данные для UI", "GraphQL/REST")
+Rel(api_gateway, mobile_app, "Синхронизация", "GraphQL")
+Rel(cloud_orchestrator, mobile_app, "Push-уведомления", "FCM/APNS")
+
+' === Пояснения ===
+Note right of thin_edge: "НОВЫЙ КОМПОНЕНТ (альтернатива)\nТонкий edge (CPU only)\nБез GPU, дешевле"
+Note right of cloud_video_ai: "НОВЫЙ КОМПОНЕНТ (альтернатива)\nВся аналитика в облаке\nТребует интернета"
+Note bottom of local_buffer: "Офлайн-буфер на 30 дней\nБазовые правила работают локально"
+Note left of cloud_orchestrator: "Управление правилами\nВозможно только при наличии связи"
+
+@enduml

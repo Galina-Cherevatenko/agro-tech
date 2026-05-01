@@ -1,0 +1,72 @@
+@startuml
+title C4 - Диаграмма кода Sync Engine (Основное решение)
+
+class SyncEngine {
+    - batch_size: int = 1000
+    - interval_sec: int = 600
+    - client: gRPCClient
+    + start(): void
+    - sync_loop(): void
+    - collect_events(limit: int): List[Event]
+    - send_batch(events: List[Event]): BatchResult
+    - handle_retry(event: Event): void
+}
+
+class RetryQueue {
+    - redis: RedisClient
+    - max_retries: int = 5
+    - backoff: ExponentialBackoff
+    + push(event: Event): void
+    + pop(): Event
+    + get_retry_count(event_id: str): int
+    - calculate_delay(retry_count: int): int
+}
+
+class BatchProcessor {
+    - compression: Compression
+    - serializer: ProtobufSerializer
+    + pack(events: List[Event]) -> bytes
+    + unpack(data: bytes) -> List[Event]
+    - compress(data: bytes): bytes
+    - decompress(data: bytes): bytes
+}
+
+class EventStoreReader {
+    - db: sqlite3.Connection
+    + get_pending_events(limit: int): List[dict]
+    + mark_synced(event_ids: List[int]): void
+    + mark_failed(event_ids: List[int]): void
+    - begin_transaction(): void
+    - commit(): void
+}
+
+class gRPCClient {
+    - channel: grpc.Channel
+    - stub: SyncServiceStub
+    + sync_batch(batch: Batch) -> SyncResponse
+    + health_check(): bool
+    - create_channel(endpoint: str): void
+}
+
+class MetricsCollector {
+    - registry: PrometheusRegistry
+    + record_sync_duration(seconds: float): void
+    + record_batch_size(count: int): void
+    + increment_retries(): void
+    + set_last_sync_timestamp(timestamp: int): void
+}
+
+SyncEngine --> EventStoreReader
+SyncEngine --> BatchProcessor
+SyncEngine --> gRPCClient
+SyncEngine --> RetryQueue
+SyncEngine --> MetricsCollector
+
+note bottom of SyncEngine
+    Конфигурация:
+    - batch_size: 1000
+    - interval: 600 сек (10 мин)
+    - timeout: 30 сек
+end note
+
+@enduml

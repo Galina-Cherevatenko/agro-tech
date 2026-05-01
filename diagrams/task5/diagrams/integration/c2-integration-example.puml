@@ -1,0 +1,41 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C2 - Пример интеграции: Агрохолдинг "Золотая Нива" как клиент
+
+Container_Boundary(client, "Клиент: Агрохолдинг 'Золотая Нива'") {
+    
+    Person(admin, "IT Admin клиента", "Управляет интеграцией")
+    
+    Container_Boundary(client_infra, "Инфраструктура клиента") {
+        Container(erp_client, "1С:ERP", "1С", "Управление хозяйством")
+        Container(bi_client, "Power BI", "BI система", "Аналитика")
+        Container(kafka_client, "Kafka (клиент)", "Managed Kafka", "Приём событий")
+        
+        Container_Boundary(farms, "Фермы клиента") {
+            Container(edge_farm1, "Edge Agent", "GPU", "Ферма 'Степная'")
+            Container(edge_farm2, "Edge Agent", "GPU", "Ферма 'Луговая'")
+            Container(edge_farm3, "Edge Agent", "GPU", "Ферма 'Привольная'")
+        }
+    }
+}
+
+System_Boundary(saas, "SaaS Платформа 'АгроТех Х'") {
+    Container(api_gateway, "API Gateway", "Kong", "https://api.agrotech.ru")
+    
+    Container_Boundary(tenant_zone, "Зона тенанта 'Золотая Нива'") {
+        ContainerDb(db_tenant, "DB: zolotaya_niva", "PostgreSQL", "Изолированная БД")
+        Container(webhook, "Webhook Producer", "Go", "Отправка в клиентскую систему")
+    }
+}
+
+Rel(edge_farm1, api_gateway, "Телеметрия", "gRPC")
+Rel(api_gateway, erp_client, "REST API", "HTTPS")
+Rel(webhook, kafka_client, "Webhook → Kafka", "HTTPS")
+
+note right of db_tenant
+    Database per Tenant
+    Полная изоляция данных
+end note
+
+@enduml
