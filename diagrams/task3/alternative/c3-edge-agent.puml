@@ -1,0 +1,53 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C3 - Компонентная диаграмма Тонкого Edge-агента (Альтернативное решение)
+
+Boundary(thin_edge, "Тонкий Edge-агент (CPU only)") {
+    
+    Boundary(video, "Видеообработка (лёгкая)") {
+        Component(light_detector, "Lightweight Detector", "MobileNet + OpenCV", "Базовая детекция (CPU)")
+        Component(motion_detector, "Motion Detector", "Background subtraction", "Обнаружение движения")
+        Component(video_buffer, "Video Buffer", "H.264 encoder", "Буферизация видео (60 сек)")
+    }
+    
+    Boundary(iot, "Управление IoT") {
+        Component(mqtt_broker, "MQTT Broker", "Mosquitto", "Локальная шина")
+        Component(modbus_adapter, "Modbus Adapter", "Node-RED", "")
+        Component(opcua_adapter, "OPC-UA Adapter", "Node-RED", "")
+        Component(device_controller, "Device Controller", "Python", "Прямые команды")
+    }
+    
+    Boundary(offline, "Офлайн-режим") {
+        Component(local_rules, "Local Rule Engine", "CEL", "Базовые правила (блокировка, алерты)")
+        Component(alert_buffer, "Alert Buffer", "SQLite", "Буфер алертов")
+        Component(telemetry_buffer, "Telemetry Buffer", "SQLite", "Буфер телеметрии")
+    }
+    
+    Boundary(sync, "Синхронизация") {
+        Component(uploader, "Video Uploader", "Python + boto3", "Загрузка видео в S3")
+        Component(data_sync, "Data Sync", "Go", "Синхронизация алертов и телеметрии")
+    }
+    
+    Boundary(api, "API") {
+        Component(local_api, "Local API", "FastAPI", "Статус и команды")
+        Component(websocket, "WebSocket Server", "FastAPI", "Базовые алерты")
+    }
+}
+
+' === Связи ===
+Rel(motion_detector, light_detector, "Области движения")
+Rel(light_detector, video_buffer, "Подозрительные кадры")
+
+Rel(device_controller, mqtt_broker, "")
+Rel(local_rules, device_controller, "Команды")
+
+Rel(local_rules, alert_buffer, "Сохранение")
+Rel(uploader, video_buffer, "Чтение видео")
+Rel(data_sync, alert_buffer, "Чтение")
+Rel(data_sync, telemetry_buffer, "Чтение")
+
+Rel(light_detector, local_api, "Статус")
+Rel(alert_buffer, websocket, "Алерты", "WebSocket")
+
+@enduml

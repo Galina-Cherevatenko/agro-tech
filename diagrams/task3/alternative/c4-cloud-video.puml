@@ -1,0 +1,85 @@
+@startuml
+title C4 - Диаграмма кода Cloud Video AI (Альтернативное решение)
+
+class S3Trigger {
+    - bucket: str
+    - prefix: str
+    + on_object_created(event: S3Event): void
+    - parse_event(event): S3Object
+    - validate_video(key: str): bool
+}
+
+class VideoDownloader {
+    - s3_client: S3Client
+    - temp_dir: str
+    + download(key: str) -> str
+    - stream_download(key, chunk_size): generator
+    - verify_checksum(file_path, expected): bool
+}
+
+class VideoProcessor {
+    - frame_sampler: FrameSampler
+    - batch_size: int = 32
+    + process(video_path: str) -> List[Detection]
+    - extract_frames(video): List[np.ndarray]
+    - batch_predict(frames): List[Prediction]
+    - apply_nms(predictions): List[Detection]
+}
+
+class FrameSampler {
+    - fps_target: int = 5
+    - quality: int = 80
+    + sample(video_path: str) -> List[Image]
+    - get_video_info(path): VideoMetadata
+    - extract_keyframes(path, interval): List[int]
+}
+
+class ModelLoader {
+    - model_path: str
+    - model: YOLO
+    + load(): void
+    + predict(images: List[Image]) -> List[Prediction]
+    - warmup(): void
+    - get_cuda_device(): int
+}
+
+class DetectionAggregator {
+    - time_window: int = 30
+    - min_overlap: float = 0.5
+    + aggregate(detections: List[Detection]) -> List[Event]
+    - merge_temporal(detections): List[Detection]
+    - filter_confidence(detections, threshold): List[Detection]
+    - remove_duplicates(detections): List[Detection]
+}
+
+class EventPublisher {
+    - kafka: KafkaProducer
+    - topic: str = "video-events"
+    + publish(event: Event): void
+    - serialize_event(event): bytes
+    - add_headers(event): dict
+}
+
+S3Trigger --> VideoDownloader
+VideoDownloader --> VideoProcessor
+VideoProcessor --> FrameSampler
+VideoProcessor --> ModelLoader
+VideoProcessor --> DetectionAggregator
+DetectionAggregator --> EventPublisher
+
+note bottom of VideoProcessor
+    Пайплайн:
+    1. Извлечение кадров (5 fps)
+    2. Батчевая отправка в модель
+    3. NMS для устранения дублей за кадр
+    4. Агрегация по времени
+end note
+
+note bottom of ModelLoader
+    Модель YOLOv8
+    - инференс на GPU
+    - батч 32 кадра
+    - ASYNC режим
+end note
+
+@enduml

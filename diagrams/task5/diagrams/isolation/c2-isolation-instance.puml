@@ -1,0 +1,25 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C2 - Мультитенантность: Инстанс на тенанта (Instance per Tenant)
+
+Container_Boundary(tenant_instance_isolation, "Изоляция на уровне инстанса") {
+    
+    Container(control_plane, "Control Plane", "K8s Operator", "Управление инстансами")
+    
+    Container_Boundary(k8s, "Kubernetes Cluster") {
+        Container(instance1, "Instance Tenant 1", "Full Stack", "Все сервисы + БД")
+        Container(instance2, "Instance Tenant 2", "Full Stack", "Все сервисы + БД")
+        Container(instanceN, "Instance Tenant N", "Full Stack", "Все сервисы + БД")
+    }
+}
+
+Rel(control_plane, k8s, "создаёт/удаляет", "K8s API")
+
+note bottom of k8s
+    Полная изоляция на уровне инфраструктуры
+    Максимальная безопасность
+    Максимальная стоимость
+end note
+
+@enduml

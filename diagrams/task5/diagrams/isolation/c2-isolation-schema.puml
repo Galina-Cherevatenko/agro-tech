@@ -1,0 +1,57 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C2 - Мультитенантность: Схема на тенанта (Schema per Tenant)
+
+Container_Boundary(tenant_schema_isolation, "Изоляция на уровне схем") {
+    
+    ' === API слой ===
+    Container(api_gateway, "API Gateway", "Kong", "Определяет tenant по subdomain/api key / JWT claim")
+    
+    ' === Тенант-осведомлённые сервисы ===
+    Container(tenant_router, "Tenant Router", "Go", "Маршрутизация запросов к правильной схеме")
+    
+    Container(device_manager, "Device Manager", "Kotlin + Spring", "Multi-tenant aware. Работает с device_tenant1, device_tenant2")
+    
+    Container(alert_engine, "Alert Engine", "Go + Temporal", "Multi-tenant aware. Работает с alerts_tenantN")
+    
+    ' === Единая БД со схемами ===
+    ContainerDb(postgres, "PostgreSQL Cluster", "Enterprise / Citus", "Единый кластер БД\nОдна БД, много схем")
+    
+    ' === Пояснение схем ===
+    note right of postgres
+        <b>Схемы в одной БД:</b>
+        - tenant1.sensors
+        - tenant1.devices
+        - tenant1.alerts
+        - tenant2.sensors
+        - tenant2.devices
+        - tenant2.alerts
+        - tenantN...
+    end note
+}
+
+' === Связи ===
+Rel(api_gateway, tenant_router, "Определяет tenant по заголовку", "gRPC / HTTP")
+Rel(tenant_router, device_manager, "Проксирует с tenant context", "gRPC")
+Rel(tenant_router, alert_engine, "Проксирует с tenant context", "gRPC")
+
+Rel(device_manager, postgres, "SELECT * FROM tenant1.devices", "SQL (search_path)")
+Rel(alert_engine, postgres, "SELECT * FROM tenant1.alerts", "SQL (search_path)")
+
+' === Пояснения ===
+note bottom of device_manager
+    <b>Multi-tenant реализация:</b>
+    - Получает tenant ID из контекста
+    - Устанавливает search_path = tenantN
+    - Все запросы идут к правильной схеме
+end note
+
+note bottom of tenant_router
+    <b>Определение tenant:</b>
+    1. Subdomain: tenant1.agrotech.ru
+    2. API Key → tenant lookup
+    3. JWT claim "tenant_id"
+end note
+
+@enduml

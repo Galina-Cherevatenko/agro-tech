@@ -1,0 +1,62 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Component.puml
+
+title C3 - Компонентная диаграмма Облачных сервисов (Альтернативное решение)
+
+Boundary(cloud, "Облачная платформа (AWS/Yandex Cloud)") {
+    
+    Boundary(ingest, "Приём данных") {
+        Component(s3_bucket, "S3 Bucket", "Object Storage", "Видео с ферм")
+        Component(kinesis, "Kinesis", "Streaming", "Поток телеметрии")
+        Component(api_gateway, "API Gateway", "Cloud Managed", "REST API")
+    }
+    
+    Boundary(processing, "Облачная обработка") {
+        Component(video_ai, "Cloud Video AI", "Lambda + GPU", "Тяжёлая аналитика видео")
+        Component(batch_processor, "Batch Processor", "EMR / Spark", "Аналитика больших объёмов")
+        Component(stream_processor, "Stream Processor", "Flink / Kafka Streams", "Real-time телеметрия")
+    }
+    
+    Boundary(ai_models, "AI модели") {
+        Component(yolo_model, "YOLOv8 Model", "ONNX", "Детекция драк/задавливания")
+        Component(classification_model, "Classification Model", "TensorFlow", "Классификация поведения")
+    }
+    
+    Boundary(storage, "Хранилища") {
+        ComponentDb(postgres, "PostgreSQL", "RDS", "Данные ферм, пользователи")
+        ComponentDb(timescaledb, "TimescaleDB", "Managed", "Телеметрия")
+        ComponentDb(clickhouse, "ClickHouse", "Cloud DWH", "Аналитика")
+        Component(redis, "Redis", "ElastiCache", "Кэш")
+    }
+    
+    Boundary(services, "Сервисы") {
+        Component(device_manager, "Device Manager", "ECS + Spring", "Управление устройствами")
+        Component(alert_engine, "Alert Engine", "ECS + Go", "Обработка алертов")
+        Component(notification, "Notification Service", "ECS + Go", "Push/Email/SMS")
+    }
+    
+    Boundary(analytics, "Аналитика") {
+        Component(dashboard, "Dashboard", "Grafana / Power BI", "Визуализация")
+        Component(reports, "Reports", "Jupyter + Pandas", "Отчёты")
+        Component(metrics, "Metrics", "Prometheus", "Метрики")
+    }
+}
+
+' === Связи ===
+Rel(s3_bucket, video_ai, "Видео на анализ", "S3 Event")
+Rel(video_ai, yolo_model, "Загрузка модели", "S3")
+Rel(video_ai, classification_model, "", "S3")
+Rel(video_ai, postgres, "Результаты детекции", "JDBC")
+
+Rel(kinesis, stream_processor, "Поток", "KCL")
+Rel(stream_processor, timescaledb, "Сохранение", "JDBC")
+Rel(stream_processor, alert_engine, "Алерты", "gRPC")
+
+Rel(api_gateway, device_manager, "", "HTTP")
+Rel(api_gateway, alert_engine, "", "HTTP")
+
+Rel(alert_engine, notification, "", "gRPC")
+Rel(batch_processor, clickhouse, "", "JDBC")
+Rel(clickhouse, dashboard, "", "ODBC")
+
+@enduml

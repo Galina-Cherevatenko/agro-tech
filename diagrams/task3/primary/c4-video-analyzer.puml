@@ -1,0 +1,103 @@
+@startuml
+title C4 - Диаграмма кода Video Analyzer (Основное решение)
+
+' === Классы детекции ===
+class FrameGrabber {
+    - rtsp_url: str
+    - cap: VideoCapture
+    - buffer: deque
+    + start(): void
+    + get_frame(): np.ndarray
+    - reconnect(): void
+    - grab_loop(): void
+}
+
+class YOLODetector {
+    - model: YOLO
+    - confidence: float = 0.5
+    - nms_threshold: float = 0.45
+    + load_model(path: str): void
+    + detect(frame: np.ndarray) -> List[Detection]
+    - preprocess(frame): np.ndarray
+    - postprocess(outputs): List[Detection]
+}
+
+class DeepSORTTracker {
+    - tracker: DeepSORT
+    - max_age: int = 30
+    - n_init: int = 3
+    + update(detections: List[Detection]) -> List[Track]
+    + get_tracks(): List[Track]
+    - match(detections, tracks): matches
+}
+
+class FightDetector {
+    - iou_threshold: float = 0.3
+    - velocity_threshold: float = 2.0
+    - history: deque
+    + detect(tracks: List[Track]) -> FightEvent
+    - compute_iou(box1, box2): float
+    - compute_velocity(track): float
+    - analyze_posture(track): str
+}
+
+class CrushDetector {
+    - overlap_threshold: float = 0.7
+    - immobility_seconds: int = 30
+    - crush_history: dict
+    + detect(tracks: List[Track]) -> CrushEvent
+    - check_overlap(big: Track, small: Track): bool
+    - check_immobility(track_id: int): bool
+}
+
+class AlertGenerator {
+    - rules: List[Rule]
+    - alert_queue: Queue
+    + generate(event_type: EventType, data: dict): Alert
+    + send(alert: Alert): void
+    - evaluate_rules(context): bool
+    - enrich_alert(alert): Alert
+}
+
+enum EventType {
+    FIGHTS
+    CRUSH
+    LOW_FOOD
+    WATER_QUALITY
+    HEAD_COUNT
+}
+
+class Alert {
+    - id: UUID
+    - type: EventType
+    - severity: str
+    - farm_id: str
+    - timestamp: datetime
+    - video_url: str
+    - resolved: bool
+}
+
+' === Связи ===
+FrameGrabber --> YOLODetector
+YOLODetector --> DeepSORTTracker
+DeepSORTTracker --> FightDetector
+DeepSORTTracker --> CrushDetector
+FightDetector --> AlertGenerator
+CrushDetector --> AlertGenerator
+AlertGenerator --> Alert
+
+' === Примечания ===
+note bottom of FightDetector
+    Детекция драки:
+    1. IOU между особями > порога
+    2. Скорость движения выше порога
+    3. Аномальная поза (опционально)
+end note
+
+note bottom of CrushDetector
+    Детекция задавливания:
+    1. Перекрытие большой и маленькой особи > 70%
+    2. Маленькая особь неподвижна > 30 сек
+end note
+
+@enduml

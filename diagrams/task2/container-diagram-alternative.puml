@@ -1,0 +1,49 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Контейнерная диаграмма - Вариант 1 (Монолит ядра)
+
+' === Персоны ===
+Person(operator, "Оператор фермы")
+Person(central_manager, "Центральный оператор")
+
+' === Внешние системы ===
+System_Ext(cameras, "IP-камеры")
+System_Ext(feeders, "Кормушки/Поилки")
+System_Ext(water_sensors, "Фильтрация воды")
+
+' === Edge (ферма) ===
+Container_Boundary(edge, "Edge-инфраструктура (каждая ферма)") {
+    Container(video_ai, "Видеоаналитика", "Python + YOLO + GPU", "Детекция драк, задавливания, подсчёт")
+    Container(iot_gateway, "IoT Gateway", "Node-RED + Mosquitto", "Управление оборудованием, сбор телеметрии")
+    Container(edge_api, "Edge API", "FastAPI", "Локальный API для оператора")
+    ContainerDb(local_db, "Local Storage", "SQLite", "Буферизация офлайн-данных")
+}
+
+' === Центр ===
+Container_Boundary(central, "Центральная инфраструктура") {
+    Container(api_gateway, "API Gateway", "Kong", "Маршрутизация, авторизация")
+    Container(core_monolith, "Core Monolith", "Spring Boot / .NET", "Управление фермами, аналитика, отчёты, пользователи")
+    Container(notification, "Notification Service", "Go", "Push-уведомления")
+    ContainerDb(central_db, "Central DB", "PostgreSQL", "Все данные")
+    ContainerDb(cache, "Redis", "Redis", "Кэш, сессии")
+}
+
+' === Связи ===
+Rel(cameras, video_ai, "RTSP")
+Rel(feeders, iot_gateway, "Modbus/OPC-UA")
+Rel(water_sensors, iot_gateway, "Modbus/LoRaWAN")
+
+Rel(video_ai, edge_api, "События")
+Rel(iot_gateway, edge_api, "Телеметрия")
+Rel(edge_api, local_db, "Сохранение")
+Rel(edge_api, operator, "WebSocket алерты")
+
+Rel(edge_api, api_gateway, "Синхронизация (batch 10 мин)", "HTTPS")
+Rel(api_gateway, core_monolith, "Запросы")
+Rel(core_monolith, central_db, "SQL")
+Rel(core_monolith, cache, "Кэш")
+Rel(core_monolith, notification, "Отправить push")
+Rel(notification, operator, "Push", "FCM/APNS")
+
+@enduml

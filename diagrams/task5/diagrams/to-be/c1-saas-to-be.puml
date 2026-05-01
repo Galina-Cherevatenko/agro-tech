@@ -1,0 +1,30 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+title C1 - SaaS-платформа "АгроТех Х" (To-Be)
+
+Person(saas_admin, "SaaS Admin (внутренний)", "Управляет всей платформой")
+Person(client_admin, "Client Admin (агрохолдинг)", "Управляет своей организацией")
+Person(farm_operator, "Оператор фермы (клиента)", "Работает с системой")
+
+System_Ext(payment_systems, "Платёжные системы", "ЮKassa, СБП, CloudPayments")
+System_Ext(client_erp, "ERP клиента", "1С, SAP, другие")
+System_Ext(cameras_client, "Оборудование клиента", "Камеры, датчики, кормушки")
+
+System_Boundary(saas, "SaaS Платформа 'АгроТех Х'") {
+    System_Ext(portal, "Self-Service Portal", "Регистрация, управление подпиской")
+    System_Ext(api_gateway, "API Gateway", "Единая точка входа")
+    System_Ext(billing, "Billing System", "Тарификация, инвойсы")
+    System_Ext(platform_core, "Platform Core", "Мультитенантное ядро")
+    System_Ext(data_platform, "Data Platform", "ClickHouse, TimescaleDB")
+}
+
+Rel(saas_admin, portal, "Администрирование", "HTTPS")
+Rel(client_admin, portal, "Управление организацией", "HTTPS")
+Rel(farm_operator, portal, "Мониторинг", "HTTPS")
+Rel(portal, billing, "Подписки", "gRPC")
+Rel(billing, payment_systems, "Платежи", "REST")
+Rel(client_erp, api_gateway, "Интеграция", "REST/Webhook")
+Rel(cameras_client, platform_core, "Telemetry", "MQTT/gRPC")
+
+@enduml

@@ -1,0 +1,51 @@
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title C2 - SaaS-платформа "АгроТех Х" (To-Be)
+
+Container_Boundary(saas, "SaaS Платформа") {
+    
+    Container_Boundary(user_layer, "Пользовательский слой") {
+        Container(portal_fe, "Self-Service Portal", "React / Next.js", "Регистрация, биллинг, API keys")
+        Container(dashboard, "Client Dashboard", "React / Grafana", "Мониторинг для клиента")
+    }
+    
+    Container_Boundary(api_layer, "API слой") {
+        Container(api_gateway, "API Gateway", "Kong", "Auth, routing, rate limiting")
+        Container(dev_portal, "Developer Portal", "Backstage", "Документация, API keys")
+    }
+    
+    Container_Boundary(billing_layer, "Биллинг") {
+        Container(plan_mgmt, "Plan Management", "Go", "Тарифы, подписки")
+        Container(usage_collector, "Usage Collector", "Go + Prometheus", "Сбор метрик")
+        Container(invoice_mgmt, "Invoice Management", "Python", "Счета, акты")
+    }
+    
+    Container_Boundary(payment, "Платёжные шлюзы") {
+        Container(yookassa_adapter, "YooKassa Adapter", "Go", "ЮKassa API")
+        Container(sbp_adapter, "SBP Adapter", "Go", "Система быстрых платежей")
+        Container(cp_adapter, "CloudPayments Adapter", "Go", "CloudPayments API")
+    }
+    
+    Container_Boundary(core, "Мультитенантное ядро") {
+        Container(tenant_mgmt, "Tenant Management", "Kotlin", "Тенанты, фермы, пользователи")
+        Container(device_mgmt, "Device Management", "Kotlin", "Устройства клиентов")
+        Container(edge_manager, "Edge Manager", "Go", "Управление edge-агентами")
+        Container(alert_core, "Alert Core", "Go+Temporal", "Оповещения")
+        Container(inventory_core, "Inventory Core", "Kotlin", "Запасы, прогнозы")
+    }
+    
+    Container_Boundary(integration, "Интеграционные шлюзы") {
+        Container(webhook_gateway, "Webhook Gateway", "Go", "Отправка webhook клиентам")
+        Container(kafka_gateway, "Kafka Gateway", "Kafka REST", "Стриминг событий")
+        Container(s3_gateway, "S3 Gateway", "MinIO", "Выгрузка данных")
+    }
+    
+    Container_Boundary(data, "Data Layer") {
+        ContainerDb(tenant_db, "Tenant DBs", "PostgreSQL", "База на тенанта")
+        ContainerDb(aggregated_db, "Aggregated ClickHouse", "ClickHouse", "Аналитика по платформе")
+        ContainerDb(cache, "Redis", "Redis Cluster", "Кэш")
+    }
+}
+
+@enduml
